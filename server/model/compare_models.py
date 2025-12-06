@@ -1,16 +1,16 @@
 """
-Train and compare CNN vs SVM vs RandomForest on the same dataset split.
+Train and compare CNN vs SVM on the same dataset split.
 
 This script assumes a trained CNN exists at server/model/mango_model.h5 and uses its
-penultimate layer as a feature extractor for classical models (SVM, RandomForest).
+penultimate layer as a feature extractor for the classical SVM model.
 
 Outputs:
-- server/model/models/svm.pkl, rf.pkl (scikit-learn models)
+- server/model/models/svm.pkl (scikit-learn model)
 - server/model/metrics/model_comparison.json (accuracies and reports)
 - server/model/best_model.json (name of best-performing model)
 
 Usage:
-  python server/model/compare_models.py --data-dir ./dataset --img-size 224 224 --batch-size 32
+    python server/model/compare_models.py --data-dir ./dataset --img-size 224 224 --batch-size 32
 """
 
 from __future__ import annotations
@@ -24,27 +24,19 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 import joblib
 
 
 THIS_DIR = Path(__file__).resolve().parent
-ROOT = THIS_DIR.parent.parent
-DEFAULT_DATASET_DIR = (ROOT / 'dataset').resolve()
-MODEL_DIR = THIS_DIR
-CNN_MODEL_PATH = MODEL_DIR / 'mango_model.h5'
-METRICS_DIR = MODEL_DIR / 'metrics'
-MODELS_DIR = MODEL_DIR / 'models'
-COMPARISON_JSON = METRICS_DIR / 'model_comparison.json'
-BEST_JSON = MODEL_DIR / 'best_model.json'
-LABELS_JSON = MODEL_DIR / 'class_indices.json'
+ROOT_DIR = THIS_DIR.parent.parent
 
 
 def build_argparser():
-    p = argparse.ArgumentParser(description='Compare CNN vs SVM vs RandomForest classifiers')
-    p.add_argument('--data-dir', type=Path, default=DEFAULT_DATASET_DIR, help='Dataset root with class subfolders')
+    p = argparse.ArgumentParser(description='Compare CNN vs SVM classifiers for a given task.')
+    p.add_argument('--task', type=str, required=True, help='Task name, e.g., "disease" or "pesticide".')
+    p.add_argument('--data-dir', type=Path, help='Dataset root. If not set, defaults to datasets/<task>/<subfolder>.')
     p.add_argument('--img-size', type=int, nargs=2, default=[224, 224], metavar=('H', 'W'))
     p.add_argument('--batch-size', type=int, default=32)
     p.add_argument('--seed', type=int, default=123)
@@ -139,17 +131,45 @@ def evaluate_sklearn_model(model, X_val: np.ndarray, y_val: np.ndarray) -> Dict[
 
 def main():
     args = build_argparser().parse_args()
-    data_dir = args.data_dir.resolve()
+    
+    # Define task-specific paths
+    task_name = args.task
+    artifacts_dir = THIS_DIR / 'artifacts' / task_name
+    cnn_model_path = artifacts_dir / 'mango_model.h5'
+    metrics_dir = artifacts_dir / 'metrics'
+    models_dir = artifacts_dir / 'models'
+    comparison_json_path = metrics_dir / 'model_comparison.json'
+    best_json_path = artifacts_dir / 'best_model.json'
+    svm_model_path = models_dir / 'svm.pkl'
+
+    # Determine data directory
+    if args.data_dir:
+        data_dir = args.data_dir.resolve()
+    else:
+        if task_name == 'disease':
+            base_data_dir = ROOT_DIR / 'datasets' / task_name
+            try:
+                subfolder = next(d for d in base_data_dir.iterdir() if d.is_dir())
+                data_dir = subfolder
+            except StopIteration:
+                data_dir = base_data_dir
+        else:
+            data_dir = ROOT_DIR / 'datasets' / task_name
+
     img_size = tuple(args.img_size)
     batch = args.batch_size
     seed = args.seed
 
-    if not CNN_MODEL_PATH.exists():
-        raise SystemExit(f"CNN model not found: {CNN_MODEL_PATH}. Train it first.")
+    if not cnn_model_path.exists():
+        raise SystemExit(f"CNN model not found: {cnn_model_path}. Train it first with model_trainer.py --task {task_name}")
+
+    print(f"Using data from: {data_dir}")
+    print(f"Loading CNN from: {cnn_model_path}")
+    print(f"Saving artifacts to: {artifacts_dir}")
 
     (X_train, y_train), (X_val, y_val), class_names = load_dataset(data_dir, img_size, batch, seed)
     # Load CNN and build feature extractor
-    cnn = tf.keras.models.load_model(str(CNN_MODEL_PATH), compile=False)
+    cnn = tf.keras.models.load_model(str(cnn_model_path), compile=False)
     feat_extractor = build_feature_extractor(cnn)
 
     # Extract features
@@ -161,47 +181,45 @@ def main():
         ('scaler', StandardScaler()),
         ('svc', SVC(kernel='rbf', C=1.0, gamma='scale', probability=True, random_state=seed)),
     ])
-    rf = RandomForestClassifier(n_estimators=300, random_state=seed)
 
     # Fit
+    print("Training SVM...")
     svm.fit(Z_train, y_train)
-    rf.fit(Z_train, y_train)
 
     # Evaluate
+    print("Evaluating models...")
     res_cnn = evaluate_cnn(cnn, X_val, y_val)
     res_svm = evaluate_sklearn_model(svm, Z_val, y_val)
-    res_rf = evaluate_sklearn_model(rf, Z_val, y_val)
 
     models_summary = {
         'cnn': res_cnn,
         'svm': res_svm,
-        'random_forest': res_rf,
         'class_names': class_names,
     }
 
     # Determine best by accuracy
-    best_name = max(('cnn', 'svm', 'random_forest'), key=lambda k: models_summary[k]['accuracy'])
+    best_name = max(('cnn', 'svm'), key=lambda k: models_summary[k]['accuracy'])
     best_acc = models_summary[best_name]['accuracy']
 
-    METRICS_DIR.mkdir(parents=True, exist_ok=True)
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save sklearn models
-    joblib.dump(svm, MODELS_DIR / 'svm.pkl')
-    joblib.dump(rf, MODELS_DIR / 'rf.pkl')
+    # Save sklearn model
+    joblib.dump(svm, svm_model_path)
 
     # Save comparison
     comparison_payload = {
         'models': models_summary,
         'best': {'name': best_name, 'accuracy': best_acc},
     }
-    COMPARISON_JSON.write_text(json.dumps(comparison_payload, indent=2))
+    comparison_json_path.write_text(json.dumps(comparison_payload, indent=2))
 
     # Save best model selection
-    BEST_JSON.write_text(json.dumps({'best_model': best_name}, indent=2))
+    best_json_path.write_text(json.dumps({'best_model': best_name}, indent=2))
 
-    print(f"Comparison complete. Best: {best_name} (acc={best_acc:.4f})")
-    print(f"Saved: {COMPARISON_JSON}")
+    print(f"\nComparison complete. Best model: {best_name} (accuracy = {best_acc:.4f})")
+    print(f"Saved SVM model to: {svm_model_path}")
+    print(f"Saved comparison metrics to: {comparison_json_path}")
 
 
 if __name__ == '__main__':

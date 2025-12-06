@@ -12,13 +12,13 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-export default function ModelComparisonChart() {
+export default function ModelComparisonChart({ task = 'disease' }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let mounted = true;
-    fetch('/api/models/comparison')
+    fetch(`/api/models/comparison?task=${task}`)
       .then(async (res) => {
         const ct = res.headers.get('content-type') || '';
         const payload = ct.includes('application/json') ? await res.json() : { error: await res.text() };
@@ -42,21 +42,20 @@ export default function ModelComparisonChart() {
 
   if (!data) return null;
 
-  const acc = {
-    cnn: (data.models?.cnn?.accuracy || 0) * 100,
-    svm: (data.models?.svm?.accuracy || 0) * 100,
-    random_forest: (data.models?.random_forest?.accuracy || 0) * 100,
-  };
-
   const best = data.best?.name;
 
+  // Build labels and values dynamically based on available models
+  const modelEntries = Object.entries(data.models || {})
+    .filter(([k]) => k !== 'class_names')
+    .map(([k, v]) => ({ key: k, label: k.replace('_', ' ').toUpperCase(), acc: (v?.accuracy || 0) * 100 }));
+
   const chartData = {
-    labels: ['CNN', 'SVM', 'Random Forest'],
+    labels: modelEntries.map((m) => m.label),
     datasets: [
       {
         label: 'Accuracy (%)',
-        data: [acc.cnn, acc.svm, acc.random_forest],
-        backgroundColor: ['#f59e0b', '#60a5fa', '#34d399'],
+        data: modelEntries.map((m) => m.acc),
+        backgroundColor: ['#f59e0b', '#60a5fa', '#34d399', '#a78bfa'].slice(0, modelEntries.length),
         borderRadius: 6,
       },
     ],

@@ -29,20 +29,16 @@ import tensorflow as tf
 
 
 THIS_DIR = Path(__file__).resolve().parent
-DEFAULT_DATASET_DIR = (THIS_DIR.parent.parent / 'dataset').resolve()
-DEFAULT_OUTPUT_MODEL = (THIS_DIR / 'mango_model.h5').resolve()
-DEFAULT_HISTORY_JSON = (THIS_DIR / 'history.json').resolve()
-DEFAULT_TRAINING_PLOT = (THIS_DIR / 'training_curves.png').resolve()
-DEFAULT_LABELS_JSON = (THIS_DIR / 'class_indices.json').resolve()
+ROOT_DIR = THIS_DIR.parent.parent
 
 
 def build_argparser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Train a CNN to classify mango images as pesticide or organic.")
-    p.add_argument('--data-dir', type=Path, default=DEFAULT_DATASET_DIR, help='Path to dataset directory containing class subfolders')
+    p = argparse.ArgumentParser(description="Train a CNN to classify mango images for a specific task.")
+    p.add_argument('--task', type=str, required=True, help='Task name, e.g., "disease" or "pesticide". Determines data and output folder.')
+    p.add_argument('--data-dir', type=Path, help='Path to dataset directory. If not set, defaults to datasets/<task>/<subfolder>.')
     p.add_argument('--epochs', type=int, default=15, help='Number of training epochs')
     p.add_argument('--batch-size', type=int, default=32, help='Batch size')
     p.add_argument('--img-size', type=int, nargs=2, default=[224, 224], metavar=('H', 'W'), help='Input image size H W')
-    p.add_argument('--output', type=Path, default=DEFAULT_OUTPUT_MODEL, help='Output path for model .h5 file')
     p.add_argument('--seed', type=int, default=123, help='Random seed for split reproducibility')
     return p
 
@@ -115,9 +111,37 @@ def plot_history(history: tf.keras.callbacks.History, out_path: Path) -> None:
 def main():
     args = build_argparser().parse_args()
 
-    data_dir: Path = args.data_dir.resolve()
+    # Define task-specific paths
+    task_name = args.task
+    artifacts_dir = THIS_DIR / 'artifacts' / task_name
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    output_model_path = artifacts_dir / 'mango_model.h5'
+    history_json_path = artifacts_dir / 'history.json'
+    training_plot_path = artifacts_dir / 'training_curves.png'
+    labels_json_path = artifacts_dir / 'class_indices.json'
+
+    # Determine data directory
+    if args.data_dir:
+        data_dir = args.data_dir.resolve()
+    else:
+        # Auto-detect common subfolder for disease task
+        if task_name == 'disease':
+            base_data_dir = ROOT_DIR / 'datasets' / task_name
+            # Find the first subdirectory (e.g., 'MangoFruitDDS')
+            try:
+                subfolder = next(d for d in base_data_dir.iterdir() if d.is_dir())
+                data_dir = subfolder
+            except StopIteration:
+                data_dir = base_data_dir # Fallback to the task dir itself
+        else:
+            data_dir = ROOT_DIR / 'datasets' / task_name
+
     if not data_dir.exists():
         raise SystemExit(f"Dataset directory not found: {data_dir}")
+    
+    print(f"Using data from: {data_dir}")
+    print(f"Saving artifacts to: {artifacts_dir}")
 
     img_height, img_width = args.img_size
     batch_size = args.batch_size
@@ -157,7 +181,7 @@ def main():
 
     # Callbacks
     ckpt_cb = tf.keras.callbacks.ModelCheckpoint(
-        filepath=str(args.output),
+        filepath=str(output_model_path),
         monitor='val_accuracy',
         save_best_only=True,
         save_weights_only=False,
@@ -178,14 +202,20 @@ def main():
     )
 
     # Save final model too (best already saved by checkpoint)
-    model.save(args.output)
+    model.save(output_model_path)
 
     # Save artifacts
-    DEFAULT_LABELS_JSON.write_text(json.dumps({i: name for i, name in enumerate(class_names)}, indent=2))
-    DEFAULT_HISTORY_JSON.write_text(json.dumps(history.history, indent=2))
-    plot_history(history, DEFAULT_TRAINING_PLOT)
+    labels_json_path.write_text(json.dumps({i: name for i, name in enumerate(class_names)}, indent=2))
+    # Convert any non-JSON-serializable values (e.g., numpy.float32) to native Python float
+    try:
+        hist_serializable = {k: [float(x) for x in v] for k, v in history.history.items()}
+        history_json_path.write_text(json.dumps(hist_serializable, indent=2))
+    except Exception:
+        # Fallback: dump raw as string to avoid training failures
+        history_json_path.write_text(json.dumps({"history": str(history.history)}, indent=2))
+    plot_history(history, training_plot_path)
 
-    print(f"\nTraining complete. Artifacts saved to:\n- Model: {args.output}\n- Labels: {DEFAULT_LABELS_JSON}\n- History: {DEFAULT_HISTORY_JSON}\n- Plot: {DEFAULT_TRAINING_PLOT}")
+    print(f"\nTraining complete. Artifacts saved to:\n- Model: {output_model_path}\n- Labels: {labels_json_path}\n- History: {history_json_path}\n- Plot: {training_plot_path}")
 
 
 if __name__ == '__main__':

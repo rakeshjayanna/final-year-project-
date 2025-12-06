@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ClassBadge from '../components/ClassBadge';
 import { useLocation } from 'react-router-dom';
 import { Bar } from 'react-chartjs-2';
 import {
@@ -16,11 +17,13 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 export default function Compare() {
   const location = useLocation();
   const inputRef = useRef(null);
+  const [task, setTask] = useState('disease'); // 'disease' | 'pesticide'
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [tab, setTab] = useState('cnn');
 
   // Load result passed from detect or from sessionStorage if present
   useEffect(() => {
@@ -61,6 +64,7 @@ export default function Compare() {
     setLoading(true); setError(''); setResult(null);
     const form = new FormData();
     form.append('image', file);
+    form.append('task', task); // Add task to form data
     try {
       const res = await fetch('/api/compare-image', { method: 'POST', body: form, headers: { 'Accept': 'application/json' } });
       const ct = res.headers.get('content-type') || '';
@@ -74,15 +78,22 @@ export default function Compare() {
     }
   };
 
-  const chart = result ? {
-    labels: ['CNN', 'SVM', 'Random Forest'],
-    datasets: [{
-      label: 'Confidence (%)',
-      data: [result.models?.cnn?.confidence || 0, result.models?.svm?.confidence || 0, result.models?.random_forest?.confidence || 0],
-      backgroundColor: ['#f59e0b', '#60a5fa', '#34d399'],
-      borderRadius: 6,
-    }],
-  } : null;
+  const chart = result ? (() => {
+    const entries = Object.entries(result.models || {}).map(([k, v]) => ({
+      key: k,
+      label: k.replace('_', ' ').toUpperCase(),
+      conf: v?.confidence || 0,
+    }));
+    return {
+      labels: entries.map((e) => e.label),
+      datasets: [{
+        label: 'Confidence (%)',
+        data: entries.map((e) => e.conf),
+        backgroundColor: ['#f59e0b', '#60a5fa', '#34d399', '#a78bfa'].slice(0, entries.length),
+        borderRadius: 6,
+      }],
+    };
+  })() : null;
 
   const options = {
     responsive: true,
@@ -98,11 +109,40 @@ export default function Compare() {
     <div className="space-y-6">
       <div className="text-center">
         <h1 className="text-2xl md:text-3xl font-semibold">Compare models on your image</h1>
-        <p className="text-gray-600">We run CNN, SVM, and Random Forest and pick the one with best validation accuracy. If tied, highest confidence on your image wins.</p>
+  <p className="text-gray-600">We run CNN and SVM and pick the one with best validation accuracy. If tied, highest confidence on your image wins.</p>
       </div>
 
       {!result && (
       <form onSubmit={onSubmit} className="card p-6 bg-gradient-to-br from-white to-amber-50 shadow-xl ring-1 ring-amber-100/60">
+        {/* Task Selector */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-800 mb-3">Analysis Type</label>
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => setTask('disease')}
+              className={`flex-1 px-4 py-2 rounded-xl font-medium transition-all text-sm ${
+                task === 'disease'
+                  ? 'bg-gradient-to-r from-mango-500 to-amber-500 text-white shadow-lg'
+                  : 'bg-white/60 backdrop-blur text-gray-700 hover:bg-white/80'
+              }`}
+            >
+              🦠 Disease Detection
+            </button>
+            <button
+              type="button"
+              onClick={() => setTask('pesticide')}
+              className={`flex-1 px-4 py-2 rounded-xl font-medium transition-all text-sm ${
+                task === 'pesticide'
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
+                  : 'bg-white/60 backdrop-blur text-gray-700 hover:bg-white/80'
+              }`}
+            >
+              🧪 Pesticide Detection
+            </button>
+          </div>
+        </div>
+        
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-2">Upload image</label>
@@ -143,7 +183,9 @@ export default function Compare() {
               </div>
             </div>
             {result.selection?.detail && (
-              <p className="mt-2 text-xs text-gray-500">Validation accuracy — CNN: {(result.selection.detail.cnn_acc*100).toFixed(1)}% · SVM: {(result.selection.detail.svm_acc*100).toFixed(1)}% · RF: {(result.selection.detail.rf_acc*100).toFixed(1)}%</p>
+              <p className="mt-2 text-xs text-gray-500">
+                Validation accuracy — CNN: {(result.selection.detail.cnn_acc*100).toFixed(1)}% · SVM: {(result.selection.detail.svm_acc*100).toFixed(1)}%
+              </p>
             )}
           </div>
 
@@ -154,10 +196,25 @@ export default function Compare() {
           <div className="card p-4 bg-white/70 ring-1 ring-amber-100/60">
             <p className="text-sm text-gray-500">Final prediction</p>
             <div className="flex items-center justify-between">
-              <p className="text-xl font-semibold capitalize">{result.final?.label || '—'}</p>
+              <div className="flex items-center gap-3">
+                <ClassBadge label={result.final?.label} />
+              </div>
               <p className="text-xl font-semibold text-mango-700">{typeof result.final?.confidence === 'number' ? `${result.final.confidence}%` : '—'}</p>
             </div>
           </div>
+
+          {/* Per-class probabilities */}
+          {result.selection?.model && result.models?.[result.selection.model]?.probs && (
+            <div className="card p-6 bg-white/70 ring-1 ring-amber-100/60">
+              <h3 className="text-lg font-semibold mb-3">Per-class confidence</h3>
+              {(() => {
+                const PerClassBars = require('../components/PerClassBars').default;
+                const dist = result.models[result.selection.model]?.probs;
+                if (!dist) return null;
+                return <PerClassBars probs={dist} />;
+              })()}
+            </div>
+          )}
         </div>
       )}
     </div>

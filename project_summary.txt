@@ -1,0 +1,56 @@
+### Project Summary: Mango Analysis Web Application
+
+This project is a full-stack, AI-powered web application designed for the analysis of mango fruit images. It provides a dual-functionality system capable of performing two distinct classification tasks:
+
+1.  **Pesticide Detection**: Determines if a mango has been treated with pesticides.
+2.  **Disease Identification**: Classifies the type of disease present on the mango, if any.
+
+The application features a user-friendly web interface for uploading images and a robust backend that serves machine learning models to provide real-time predictions.
+
+---
+
+### Technology Stack
+
+The application is built using a modern technology stack, separating concerns between the frontend, backend, and machine learning components.
+
+**1. Frontend (Client-side):**
+*   **Framework**: **React.js** is used to build a dynamic and responsive user interface.
+*   **Styling**: **Tailwind CSS** provides a utility-first approach for rapid and modern UI design.
+*   **Routing**: **React Router** manages navigation between different pages of the application (e.g., Home, Compare, Insights).
+*   **Data Visualization**: **Chart.js** is used on the "Insights" page to display model performance comparisons.
+*   **Animations**: **Framer Motion** adds fluid animations to enhance the user experience.
+
+**2. Backend (Server-side):**
+*   **Framework**: **Flask** (a Python micro-framework) serves as the backbone, providing a RESTful API for the frontend to communicate with.
+*   **API Structure**: The backend exposes several endpoints (e.g., `/api/detect`, `/api/compare-image`, `/api/models/comparison`) to handle image uploads, predictions, and data retrieval.
+
+**3. Machine Learning (AI Core):**
+*   **Deep Learning**: **TensorFlow (with Keras)** is the primary library for building, training, and serving the core image classification models. The system uses an advanced **Transfer Learning** approach with a **MobileNetV2** backbone, pre-trained on ImageNet, for high accuracy.
+*   **Classical Machine Learning**: **Scikit-learn** is used to train a **Support Vector Machine (SVM)** model on features extracted from the deep learning model, offering an alternative prediction for comparison.
+*   **Image Processing**: **Pillow (PIL)** is used for all image manipulation and pre-processing tasks.
+*   **Numerical Operations**: **NumPy** is used for efficient array and matrix operations.
+*   **Model Persistence**: **Joblib** is used to save and load the trained SVM models and data scalers.
+
+---
+
+### End-to-End Workflow
+
+The user experience and system processing flow from start to finish is as follows:
+
+1.  **Task Selection**: The user visits the application and is greeted with a choice between two analysis tasks: "Disease Detection" or "Pesticide Detection".
+
+2.  **Image Upload**: The user selects an image of a mango from their local device and uploads it through the web interface.
+
+3.  **API Request**: The React frontend sends the image file and the selected `task` to the Flask backend via a `POST` request to the `/api/detect` endpoint.
+
+4.  **Dynamic Model Loading**: The backend receives the request and identifies the `task`. It then dynamically loads the corresponding pre-trained models (both the TensorFlow CNN and the Scikit-learn SVM) from the `server/model/artifacts/{task}/` directory. To optimize performance, loaded models are cached in memory.
+
+5.  **Image Pre-processing**: The uploaded image is resized to the required input dimensions (e.g., 224x224 pixels) and normalized to a format the models can understand.
+
+6.  **Prediction**:
+    *   The pre-processed image is passed to the **TensorFlow (MobileNetV2) model**, which returns a primary prediction and a confidence score.
+    *   The same image is also used to generate features that are fed into the **SVM model** for a secondary prediction.
+
+7.  **Response to User**: The backend sends a JSON response back to the frontend containing the predictions from both models, confidence scores, and the predicted class (e.g., "Anthracnose" for disease or "Pesticide-Treated" for pesticide).
+
+8.  **Displaying Results**: The frontend parses the JSON response and displays the results to the user in a clear, readable format, indicating the outcome of the analysis. The "Insights" and "Compare" pages allow the user to further explore model performance and compare predictions on different images.

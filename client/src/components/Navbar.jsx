@@ -15,7 +15,7 @@ function Logo() {
 
 export default function Navbar() {
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-amber-100 bg-white/70 backdrop-blur">
+    <header className="sticky top-0 z-40 w-full border-b border-white/40 bg-white/60 backdrop-blur-md shadow-sm">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <Link to="/" className="no-underline text-inherit">
           <Logo />
@@ -25,7 +25,7 @@ export default function Navbar() {
             to="/"
             end
             className={({ isActive }) =>
-              `px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'text-white bg-mango-500' : 'text-gray-700 hover:bg-amber-100'}`
+              `px-3 py-2 rounded-full text-sm font-medium ${isActive ? 'text-white bg-mango-500' : 'text-gray-700 hover:bg-amber-100'}`
             }
           >
             Home
@@ -33,7 +33,7 @@ export default function Navbar() {
           <NavLink
             to="/compare"
             className={({ isActive }) =>
-              `px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'text-white bg-mango-500' : 'text-gray-700 hover:bg-amber-100'}`
+              `px-3 py-2 rounded-full text-sm font-medium ${isActive ? 'text-white bg-mango-500' : 'text-gray-700 hover:bg-amber-100'}`
             }
           >
             Compare
@@ -41,7 +41,7 @@ export default function Navbar() {
           <NavLink
             to="/about"
             className={({ isActive }) =>
-              `px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'text-white bg-mango-500' : 'text-gray-700 hover:bg-amber-100'}`
+              `px-3 py-2 rounded-full text-sm font-medium ${isActive ? 'text-white bg-mango-500' : 'text-gray-700 hover:bg-amber-100'}`
             }
           >
             About
