@@ -1010,9 +1010,8 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 ## 📞 Contact
 
 **Rakesh Jayanna**
-- 💼 GitHub: [@rakeshjayanna](https://github.com/rakeshjayanna)
-- 📧 Email: your.email@example.com
-- 🔗 LinkedIn: [Your Profile](https://linkedin.com/in/yourprofile)
+- 💼 GitHub: [@rakeshjayanna](https://github.com/rakeshjayanna) 
+- 🔗 LinkedIn: [Rakesh]([https://linkedin.com/in/yourprofile](https://www.linkedin.com/in/rakesh-jayanna-215a3728b/))
 - 🌐 Project: [https://github.com/rakeshjayanna/final-year-project-](https://github.com/rakeshjayanna/final-year-project-)
 
 ---
